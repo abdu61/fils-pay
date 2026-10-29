@@ -1,6 +1,7 @@
 import type { ApiErrorBody } from "../types.js";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:3000";
+const configuredApiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+const API_BASE_URL = (configuredApiBase || (import.meta.env.DEV ? "http://localhost:3000" : "")).replace(/\/$/, "");
 
 /** Mirrors apps/api's own uniform `{ error, message? }` body
  *  (lib/errors.ts / plugins/errorHandler.ts) — one error shape end to
@@ -21,8 +22,8 @@ export class ApiError extends Error {
 
 /**
  * `credentials: "include"`: the dashboard is cookie-authenticated
- * (`fp_sid`), and apps/web (5173) is not the API origin (3000), so the
- * session cookie only rides along on a request that asks for it. The public
+ * (`fp_sid`), and apps/web (5173) is not the API origin (3000), so
+ * the session cookie only rides along on a request that asks for it. The public
  * checkout flow is unaffected — /pay/:token reads no cookie server-side, so
  * sending one that doesn't exist is a no-op there.
  *
@@ -36,6 +37,10 @@ export class ApiError extends Error {
 // this leaks the session cookie to whatever VITE_API_BASE_URL is — am
 // — MK: CORS is locked to the two origins in config. fine
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!API_BASE_URL) {
+    throw new Error("FilsPay API is not configured. Set VITE_API_BASE_URL to the HTTPS API origin.");
+  }
+
   const hasBody = init?.body !== undefined && init.body !== null;
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
